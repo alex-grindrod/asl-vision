@@ -1,9 +1,15 @@
+"""
+CURRENTLY SLOWER THAN NORMAL VERSION - USE process_and_split.py INSTEAD
+WILL LOOK INTO AND FIX LATER
+"""
+
 import sys
 sys.path.append(".")
 
 import cv2
 import json
 import numpy as np
+import ray
 import time
 from moviepy.editor import VideoFileClip
 from WLASL.start_kit import preprocess
@@ -16,13 +22,12 @@ JSON_FILE_PATH = Path("WLASL/start_kit/WLASL_v0.3.json")
 RAW_VIDEOS_PATH = Path("WLASL/start_kit/raw_videos_mp4")
 
 FRAME_CAP = 30
-RESOLUTION = (854, 480)
+RESOLUTION = (640, 480)
 INTERPOLATION = cv2.INTER_LINEAR
-DATASET_SAVE_PATH = Path("data/processed_unsplit_30")
 
 
 def create_directories(gloss, instance):
-    path = DATASET_SAVE_PATH / gloss
+    path = Path(f"data/processed_unsplit_30/{gloss}")
     if not path.exists():
         path.mkdir(parents=True, exist_ok=True)
     return path
@@ -44,23 +49,19 @@ def get_video_path(instance):
 
     return None
 
-
 def can_open_video(video_path):
-    """
-    Checks to see if video file is playable/openable
-    (If it wasn't already obvious by the name of the function)
-    """
     video_path = str(video_path)
     try:
         clip = VideoFileClip(video_path)
         return True
     except:
+        # print(f"Skipped: {video_path}")
         return False
 
 
 def expand_frames(frames, frame_cap=30):
     """
-    Expands Frame Count to frame_cap by duplicating frames from middle --> out
+    Expands Frame Count to 30 by duplicating frames from middle --> out
     """
     first_half = deque(frames[:len(frames) // 2])
     second_half = deque(frames[len(frames) // 2 :])
@@ -156,38 +157,65 @@ def resize_frames(frames, resolution):
 #     return cropped_frames
 
 
+@ray.remote  
+class ASLVideoProcessor:
+    def __init__(self, resolution, frame_cap):
+        self.resolution = resolution
+        self.frame_cap = frame_cap
+
+    def _process_video(self, gloss, instance):
+        """
+        Handles video processing - Standardizing frame count and resolution
+        """
+        video_path = get_video_path(instance)
+        if not can_open_video(video_path):
+            return
+        
+        save_dir = create_directories(gloss, instance)
+        frames = preprocess.extract_frame_as_video(video_path, instance["frame_start"], instance["frame_end"] - 1)
+        if len(frames) == 0:
+            print(video_path)
+            print(instance["video_id"])
+            
+        frames = set_frames(frames, frame_cap=self.frame_cap)
+        frames = resize_frames(frames, resolution=RESOLUTION)
+
+        save_dir = save_dir / (instance["video_id"] + ".mp4")
+
+        preprocess.convert_frames_to_video(frames, save_dir, RESOLUTION)
+
+
+def process_word(word, vidProcessor):
+    """
+    Process all video samples associated with a word annotation
+    word : dictionary with keys - gloss, instances - from WLASL_V0.3.json
+    """
+    gloss = word["gloss"]
+    instances = word["instances"]
+    print(gloss)
+    sys.stdout.flush()
+
+    #Skip if word is already processed
+    path = Path(f"data/processed_unsplit_30/{gloss}")
+    if path.exists():
+        print("be")
+        sys.stdout.flush()
+        return
+    
+    processed_videos = [vidProcessor._process_video.remote(gloss, instance) for instance in instances]
+    ray.get(processed_videos)
+
+
 if __name__ == "__main__":
     start = time.time()
+    ray.init(ignore_reinit_error=True) 
+
     with open(JSON_FILE_PATH, 'r') as metadata_file:
         annotations = json.load(metadata_file) 
-        
-    for i in tqdm(range(2000), desc="Processing"):
-        word = annotations[i]
-        gloss = word["gloss"]
-        instances = word["instances"]
 
-        path = DATASET_SAVE_PATH / gloss
-        if path.exists():
-            print(f"Word: {gloss} exists --> skipping")
-            continue
-
-        for instance in instances:
-            video_path = get_video_path(instance)
-            if not can_open_video(video_path):
-                continue
-
-            save_dir = create_directories(gloss, instance)
-            frames = preprocess.extract_frame_as_video(video_path, instance["frame_start"], instance["frame_end"] - 1)
-            if len(frames) == 0:
-                print(video_path)
-                print(instance["video_id"])
-            frames = set_frames(frames, frame_cap=FRAME_CAP)
-            frames = resize_frames(frames, resolution=RESOLUTION)
-
-            # Commented cuz some videos have the wrong bbox dimensions
-            # frames = crop_frames(frames, instance["bbox"]) 
-
-            save_dir = save_dir / (instance["video_id"] + ".mp4")
-
-            preprocess.convert_frames_to_video(frames, save_dir, RESOLUTION)
+    vidProcessor = ASLVideoProcessor.remote(resolution=RESOLUTION, frame_cap=FRAME_CAP)
+    results = ["" for i in range(10)]
+    for i in tqdm(range(10), desc="Processing"):
+        results[i] = process_word(annotations[i], vidProcessor)
+    
     print(time.time() - start)
