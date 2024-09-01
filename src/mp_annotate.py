@@ -13,20 +13,30 @@ holistic = mp_holistic.Holistic(min_detection_confidence=0.7, min_tracking_confi
 
 
 def _extract_tensor(landmark_type, indices):
-    arr=[]
+    """
+    Extract the tensor representing the x, y, z, and visibility of keypoints
+    Return np.zeros tensor if landmark type isn't visible/not in video frame
+    """
     if not landmark_type:
         return np.zeros(len(indices) * 4)
     else:
+        arr=[]
         for ind in indices:
             p = landmark_type.landmark[ind]
             arr.append([p.x, p.y, p.z, p.visibility])
         return np.array(arr)
-        # return np.array(arr).flatten()
     
 
 def get_datapoints(results):
+    """
+    Extract the mp keypoints of interest. Not all facial and pose keypoints are relevant
+    
+    """
+
     #Pose Indexing: 11-16 (wrist, elbow, shoulder)
     pose_indices = [11, 12, 13, 14, 15, 16]
+
+    #Left and Right Hand: 0 - 21 (captures all keypoints on hands)
     left_indices = [i for i in range(21)]
     right_indices = [i for i in range(21)]
 
@@ -56,17 +66,24 @@ def get_datapoints(results):
 
 
 def draw_datapoints_from_tensors(body_landmarks, org_image):
+    """
+    Edits a frame by drawing circles on specified keypoints x,y,z coords
+    """
     image = copy.deepcopy(org_image)
     for landmark_tensor in body_landmarks:
         for keypoint in landmark_tensor:
             if keypoint.shape == ():
                 continue
             x, y = (int(keypoint[0] * image.shape[1]), int(keypoint[1] * image.shape[0]))
-            cv2.circle(image, (x, y), 5, (0, 255, 0), -1)  # Draw a green circle
+            cv2.circle(image, (x, y), 5, (0, 255, 0), -1)
     return cv2.cvtColor(cv2.flip(image, 1), cv2.COLOR_BGR2RGB)
 
 
 def annotate_video(video_path, save_video_path=None):
+    """
+    Extract the mediapipe keypoints over a 30 frame video and format the data into 1D tensor with 744 elements
+    Can also edit an existing video and draw keypoints for debugging purposes (specify save_video_path)
+    """
     keypoints_tensor = []
     cap = cv2.VideoCapture(video_path)
     frame_set = []
@@ -83,8 +100,6 @@ def annotate_video(video_path, save_video_path=None):
 
         face, left, pose, right = get_datapoints(results)
         keypoints_tensor.append(np.concatenate([face.flatten(), left.flatten(), pose.flatten(), right.flatten()], axis=0))
-        if i == 0:
-            print(keypoints_tensor[0].shape)
 
         if save_video_path:
             frame_set.append(draw_datapoints_from_tensors([face, left, pose, right], rgb_image))
@@ -93,6 +108,8 @@ def annotate_video(video_path, save_video_path=None):
             break
 
     if save_video_path:
+        save_video_path.parent.mkdir(parents=True, exist_ok=True)
+        save_video_path = str(save_video_path)
         convert_frames_to_video(frame_set, save_video_path, (rgb_image.shape[1], rgb_image.shape[0]))
 
     cap.release()
@@ -100,6 +117,9 @@ def annotate_video(video_path, save_video_path=None):
         
 
 def draw_datapoints(landmark_type, indices, image):
+    """
+    Draw mp keypoints on an image by using indices rather than a tensor
+    """
     if not landmark_type:
         print(f"Error no datapoints detected (empty landmark list)")
         return image
@@ -112,6 +132,9 @@ def draw_datapoints(landmark_type, indices, image):
 
 
 def _draw_landmarks(image, results):
+    """
+    Draws all available landmarks on an image for face, pose, left hand, and right hand
+    """
     if results.face_landmarks:
         mp_drawing.draw_landmarks(image, results.face_landmarks, mp_holistic.FACEMESH_CONTOURS)
 
@@ -127,6 +150,10 @@ def _draw_landmarks(image, results):
 
 
 def mp_demo(first_frame=False, stop_frame=-1):
+    """
+    Show mediapipe in action
+    Can be used to show mp keypoints in real time on a local camera
+    """
     cap = cv2.VideoCapture(0)
     count = 0
     while cap.isOpened():
