@@ -1,0 +1,11 @@
+data/
+env/
+Backup/
+lightning_logs/
+/models/
+test_videos/
+verify_annotations/
+wandb/
+WLASL/
+.DS_Store
+__pycache__
