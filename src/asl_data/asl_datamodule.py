@@ -3,7 +3,7 @@ sys.path.append(".")
 
 import pytorch_lightning as pl
 from pathlib import Path
-from src.asl_dataset import ASLDataset
+from src.asl_data.asl_dataset import ASLDataset
 from sklearn.model_selection import train_test_split
 from torchvision import transforms
 from torch.utils.data import DataLoader, Subset
@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, Subset
 DEFAULT_DATASET = Path("data/processed_unsplit_30")
 
 class ASLDataModule(pl.LightningDataModule):
-    def __init__(self, dataset_path: Path, subset: int = 100, batch_size: int = 32, val_split: int = 0.2, test_split: int = 0.1, num_workers: int = 4):
+    def __init__(self, dataset_path: Path, subset: int = 100, batch_size: int = 32, val_split: int = 0.2, test_split: int = 0.1, num_workers: int = 4, model_type: str = 'AslLstm'):
         super().__init__()
 
         self.dataset_path = dataset_path
@@ -23,13 +23,14 @@ class ASLDataModule(pl.LightningDataModule):
         self.val_split = val_split
         self.test_split = test_split
         self.num_workers = num_workers
+        self.model_type = model_type
         self.tranform = transforms.Compose([
             transforms.ToTensor()
         ])
 
     
     def setup(self, stage=None):
-        full_asldataset = ASLDataset(dataset_path=self.dataset_path, subset=self.subset)
+        full_asldataset = ASLDataset(dataset_path=self.dataset_path, subset=self.subset, model_type=self.model_type)
         full_asllabels = [label for _, label in full_asldataset]
 
         total_size = len(full_asldataset)
@@ -52,6 +53,8 @@ class ASLDataModule(pl.LightningDataModule):
         self.train_dataset = Subset(full_asldataset, train_indices)
         self.val_dataset = Subset(full_asldataset, val_indices)
         self.test_dataset = Subset(full_asldataset, test_indices)
+
+        return full_asldataset.shape()
     
     
     def train_dataloader(self) -> DataLoader:
@@ -64,7 +67,7 @@ class ASLDataModule(pl.LightningDataModule):
 
     def test_dataloader(self) -> DataLoader:
         return DataLoader(dataset=self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
-    
+        
 
 if __name__ == "__main__":
     data_module = ASLDataModule(

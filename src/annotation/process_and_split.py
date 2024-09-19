@@ -3,26 +3,30 @@ sys.path.append(".")
 
 import cv2
 import json
-import numpy as np
 import time
 from moviepy.editor import VideoFileClip
 from WLASL.start_kit import preprocess
 from tqdm import tqdm
 from collections import deque
 from pathlib import Path
+from src.utilities import ASLConfig
 
+
+CONFIG = ASLConfig()
 
 JSON_FILE_PATH = Path("WLASL/start_kit/WLASL_v0.3.json")
-RAW_VIDEOS_PATH = Path("WLASL/start_kit/raw_videos_mp4")
+RAW_VIDEOS_PATH = CONFIG.raw_dir
 
-FRAME_CAP = 30
-RESOLUTION = (854, 480)
-INTERPOLATION = cv2.INTER_LINEAR
-DATASET_SAVE_PATH = Path("data/processed_unsplit_30")
+FRAME_CAP = CONFIG.frame_cap
+SUBSET = CONFIG.subset
+RESOLUTION = CONFIG.resolution
+INTERPOLATION = CONFIG.interpolation
+PROCESSED_DIR = CONFIG.processed_dir
+VARIANT_SPLIT = CONFIG.variant_split
 
 
 def create_directories(gloss, instance):
-    path = DATASET_SAVE_PATH / gloss
+    path = PROCESSED_DIR / gloss
     if not path.exists():
         path.mkdir(parents=True, exist_ok=True)
     return path
@@ -43,6 +47,18 @@ def get_video_path(instance):
         return RAW_VIDEOS_PATH / (instance["video_id"] + ".mp4")
 
     return None
+
+# def get_video_path(instance):
+#     if "youtube" in instance["url"]:
+#         _, yt_id = instance["url"].split("=")
+#         yt_id += ".mp4"
+#         for video in RAW_VIDEOS_PATH.glob(yt_id):
+#             return RAW_VIDEOS_PATH / yt_id
+        
+#     for video in RAW_VIDEOS_PATH.glob(instance["video_id"] + ".mp4"):
+#         return RAW_VIDEOS_PATH / (instance["video_id"] + ".mp4")
+
+#     return None
 
 
 def can_open_video(video_path):
@@ -157,16 +173,17 @@ def resize_frames(frames, resolution):
 
 
 if __name__ == "__main__":
+
     start = time.time()
     with open(JSON_FILE_PATH, 'r') as metadata_file:
         annotations = json.load(metadata_file) 
         
-    for i in tqdm(range(2000), desc="Processing"):
+    for i in tqdm(range(SUBSET), desc="Processing"):
         word = annotations[i]
         gloss = word["gloss"]
         instances = word["instances"]
 
-        path = DATASET_SAVE_PATH / gloss
+        path = PROCESSED_DIR / gloss
         if path.exists():
             print(f"Word: {gloss} exists --> skipping")
             continue
@@ -177,10 +194,11 @@ if __name__ == "__main__":
                 continue
 
             save_dir = create_directories(gloss, instance)
-            frames = preprocess.extract_frame_as_video(video_path, instance["frame_start"], instance["frame_end"] - 1)
+            frames = preprocess.video_to_frames(video_path)
             if len(frames) == 0:
                 print(video_path)
                 print(instance["video_id"])
+                exit()
             frames = set_frames(frames, frame_cap=FRAME_CAP)
             frames = resize_frames(frames, resolution=RESOLUTION)
 

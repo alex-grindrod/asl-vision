@@ -8,6 +8,9 @@ import torch.optim as optim
 import torchmetrics
 from src.models.asl_lstm import AslLstmModel
 from src.models.asl_tcn import AslTcnModel
+from src.models.asl_gru import AslGruModel
+from src.models.asl_st_gcn import AslSTGCNModel
+from src.models.asl_st_gcn_orig import Asl_STGCN_18_Model
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -24,6 +27,12 @@ class AslModel(pl.LightningModule):
             self.model = AslLstmModel(self.input_size, self.output_size, **model_params)
         elif model_type == 'AslTcn':
             self.model = AslTcnModel(self.input_size, self.output_size, **model_params)
+        elif model_type == 'AslGru':
+            self.model = AslGruModel(self.input_size, self.output_size, **model_params)
+        elif model_type == 'AslSTGCN':
+            self.model = AslSTGCNModel(self.output_size, **model_params)
+        elif model_type == 'AslSTGCN18':
+            self.model = Asl_STGCN_18_Model(self.input_size, self.output_size, **model_params)
         else:
             raise ValueError("No valid model type specified")
         
@@ -42,25 +51,33 @@ class AslModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_pred = self.forward(x)
+        loss = self.loss_fn(y_pred, y)
+
         prediction = torch.argmax(y_pred, dim=1)
         print(f"Thing: {prediction} \n {y}")
-        print(self.train_accuracy(prediction, y))
-        return self.loss_fn(y_pred, y)
+
+        accuracy = torchmetrics.functional.accuracy(prediction, y, task='multiclass', num_classes=self.output_size, average='macro')
+        print(f'train acc: {accuracy}')
+        if self.logger:
+            self.log('Training Loss', loss)
+
+        return loss
 
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
         y_pred = self(x)
-
+        print(y_pred.shape)
+        print(y.shape)
         loss = self.loss_fn(y_pred, y)
 
         if self.logger:
             self.log('val_loss', loss)
         
         prediction = torch.argmax(y_pred, dim=1)
-        accuracy = self.val_accuracy(prediction, y)
+        accuracy = torchmetrics.functional.accuracy(prediction, y, task='multiclass', num_classes=self.output_size, average='macro')
 
-        self.val_accuracy.update(y_pred, y)
+        self.val_accuracy.update(prediction, y)
 
         print(f"Normal val acc: {accuracy}")
         return {"val_loss" : loss, "val_accuracy" : accuracy}
@@ -77,4 +94,4 @@ class AslModel(pl.LightningModule):
         self.val_accuracy.reset()
 
     def configure_optimizers(self):
-        return optim.Adam(self.parameters(), lr=self.lr)
+        return optim.Adam(self.parameters(), lr=self.lr, weight_decay=1e-4)

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class TCNLayer(nn.Module):
     def __init__(self, input_size, output_size, kernel_size, dilation):
         super(TCNLayer, self).__init__()
@@ -21,6 +22,7 @@ class TCNLayer(nn.Module):
         x = self.dropout(x)
         x = F.relu(x)
         return x
+
 
 class AslTcnModel(nn.Module):
     def __init__(self, input_size, output_size, num_layers=3, hidden_size=64, kernel_size=3):
