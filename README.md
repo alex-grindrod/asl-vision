@@ -18,3 +18,28 @@
 - [ ] Try splitting classes with multiple sign variants
 - [ ] Hyperparameter sweeps for each architecture
 - [ ] Incorporate top-k accuracy in training
+
+
+## Works Cited
+1. WLASL 2000 Dataset
+```
+@inproceedings{li2020transferring,
+ title={Transferring cross-domain knowledge for video sign language recognition},
+ author={Li, Dongxu and Yu, Xin and Xu, Chenchen and Petersson, Lars and Li, Hongdong},
+ booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+ pages={6205--6214},
+ year={2020}
+}
+```
+
+2. [STGCN Simple Implementation](https://github.com/FelixOpolka/STGCN-PyTorch)
+
+3. STGCN Original Implementation
+```
+@misc{mmskeleton2019,
+  author =       {Sijie Yan, Yuanjun Xiong, Jingbo Wang, Dahua Lin},
+  title =        {MMSkeleton},
+  howpublished = {\url{https://github.com/open-mmlab/mmskeleton}},
+  year =         {2019}
+}
+```
